@@ -121,6 +121,25 @@ document.getElementById('itemForm').addEventListener('submit', async (e) => {
     }
 });
 
+// Dashboard Button
+
+// Xử lý đăng xuất
+document.getElementById('dashboard-bt').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const item = {
+        name: document.getElementById('name').value,
+        quantity: Math.max(0, document.getElementById('quantity').value),
+        description: document.getElementById('description').value
+    };
+
+    try {
+        await fetch('/dashboard', { method: 'POST' });
+        window.location.href = '/dashboard.html';
+    } catch (error) {
+        console.error('Lỗi dashboard:', error);
+    }
+});
+
 document.getElementById('searchInput').addEventListener('input', () => {
     currentPage = 1;
     loadItems();

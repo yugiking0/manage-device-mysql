@@ -1,3 +1,6 @@
+
+const session = require('express-session');
+const bcrypt = require('bcrypt');
 const express = require('express');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2');
@@ -15,9 +18,71 @@ connection.connect(err => {
 });
 
 // Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(session({
+    secret: 'your-secret-key',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false } // Đặt true nếu dùng HTTPS
+}));
+
+// Middleware kiểm tra đăng nhập
+const requireLogin = (req, res, next) => {
+    if (!req.session.userId) {
+        return res.redirect('/login.html');
+    }
+    next();
+};
+
+// Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// API đăng nhập
+app.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+    try {
+        // Tìm user trong database
+        const [rows] = await connection.promise().query(
+            'SELECT * FROM users WHERE username = ?', 
+            [username]
+        );
+
+        if (rows.length === 0) {
+            return res.status(401).json({ error: 'Tài khoản không tồn tại' });
+        }
+
+        const user = rows[0];
+        
+        // So sánh mật khẩu
+        const match = await bcrypt.compare(password, user.password);
+        if (!match) {
+            return res.status(401).json({ error: 'Mật khẩu không đúng' });
+        }
+
+        // Lưu thông tin session
+        req.session.userId = user.id;
+        res.json({ success: true });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Lỗi server' });
+    }
+});
+
+// API đăng xuất
+app.post('/logout', (req, res) => {
+    req.session.destroy();
+    res.json({ success: true });
+});
+
+// Route bảo vệ
+app.get('/dashboard', requireLogin, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/dashboard.html'));
+});
 
 // API endpoints
 app.get('/items', (req, res) => {
@@ -85,6 +150,38 @@ app.delete('/items/:id', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ success: true });
     });
+});
+
+// API thống kê
+app.get('/api/statistics', requireLogin, async (req, res) => {
+    try {
+        const [totalItems] = await connection.promise().query(
+            'SELECT COUNT(*) AS total FROM items'
+        );
+        
+        const [totalQuantity] = await connection.promise().query(
+            'SELECT SUM(quantity) AS total FROM items'
+        );
+
+        const [lowStock] = await connection.promise().query(
+            'SELECT * FROM items WHERE quantity < 10 ORDER BY quantity ASC LIMIT 5'
+        );
+
+        const [categories] = await connection.promise().query(
+            'SELECT name, COUNT(*) AS count FROM items GROUP BY name'
+        );
+
+        res.json({
+            totalItems: totalItems[0].total,
+            totalQuantity: totalQuantity[0].total || 0,
+            lowStock,
+            categories
+        });
+        
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Lỗi server' });
+    }
 });
 
 app.listen(port, () => {
