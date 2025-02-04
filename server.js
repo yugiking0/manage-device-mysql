@@ -90,5 +90,3 @@ app.delete('/items/:id', (req, res) => {
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
 });
-
-//node server.js
