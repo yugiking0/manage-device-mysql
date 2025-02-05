@@ -1,6 +1,5 @@
-
 const session = require('express-session');
-const bcrypt = require('bcrypt');
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2');
@@ -17,7 +16,17 @@ connection.connect(err => {
     console.log('Connected to MySQL database');
 });
 
+// Thêm vào đầu file server.js
+const cors = require('cors');
+app.use(cors({
+    origin: 'http://localhost:3000',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 // Middleware
+// Sắp xếp các middleware đúng thứ tự
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -35,6 +44,46 @@ const requireLogin = (req, res, next) => {
     }
     next();
 };
+
+app.use('/api', requireLogin); // Áp dụng cho tất cả API
+
+// Middleware kiểm tra admin
+const requireAdmin = (req, res, next) => {
+    if (!req.session.userId) {
+        return res.redirect('/login.html');
+    }
+    
+    connection.query(
+        'SELECT role FROM users WHERE id = ?',
+        [req.session.userId],
+        (err, results) => {
+            if (err || results[0].role !== 'admin') {
+                return res.status(403).send('Forbidden');
+            }
+            next();
+        }
+    );
+};
+
+// Route đăng ký user (chỉ admin truy cập)
+app.get('/register.html', requireAdmin, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/register.html'));
+});
+
+app.post('/api/register', requireAdmin, async (req, res) => {
+    const { username, password, email, role } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    try {
+        await connection.promise().query(
+            'INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)',
+            [username, hashedPassword, email, role]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(400).json({ error: 'Username đã tồn tại' });
+    }
+});
 
 // Middleware
 app.use(bodyParser.json());
@@ -70,6 +119,48 @@ app.post('/login', async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Lỗi server' });
+    }
+});
+
+const bcrypt = require('bcrypt'); // Đảm bảo đã require bcrypt
+
+// API tạo user mới (POST)
+app.post('/api/users', requireAdmin, async (req, res) => {
+    const { username, password, email, role } = req.body;
+    
+    try {
+        // Hash password trước khi lưu vào database
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        await connection.promise().query(
+            'INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)',
+            [username, hashedPassword, email, role]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(400).json({ error: 'Username đã tồn tại' });
+    }
+});
+
+// API cập nhật user (PUT)
+app.put('/api/users/:id', requireAdmin, async (req, res) => {
+    const { username, password, email, role } = req.body;
+    
+    try {
+        let updateData = { username, email, role };
+        
+        // Nếu có password mới, hash password
+        if (password) {
+            updateData.password = await bcrypt.hash(password, 10);
+        }
+
+        await connection.promise().query(
+            'UPDATE users SET ? WHERE id = ?',
+            [updateData, req.params.id]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(400).json({ error: 'Cập nhật thất bại' });
     }
 });
 
@@ -184,6 +275,53 @@ app.get('/api/statistics', requireLogin, async (req, res) => {
     }
 });
 
+// API get all users
+app.get('/api/users', requireAdmin, (req, res) => {
+    connection.query(
+        'SELECT id, username, email, role FROM users',
+        (err, results) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(results);
+        }
+    );
+});
+
+// API update user
+app.put('/api/users/:id', requireAdmin, async (req, res) => {
+    alert("CHeck here");
+
+    const { username, email, role } = req.body;
+    try {
+        await connection.promise().query(
+            'UPDATE users SET username = ?, email = ?, role = ? WHERE id = ?',
+            [username, email, role, req.params.id]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(400).json({ error: 'Cập nhật thất bại' });
+    }
+});
+
+// API delete user
+app.delete('/api/users/:id', requireAdmin, (req, res) => {
+    connection.query(
+        'DELETE FROM users WHERE id = ?',
+        [req.params.id],
+        (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true });
+        }
+    );
+});
+
+// Xử lý 404 cho API
+app.use('/api/*', (req, res) => {
+    res.status(404).json({ error: 'API endpoint không tồn tại' });
+});
+
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
 });
+
+// Static files nên ở cuối
+app.use(express.static('public'));

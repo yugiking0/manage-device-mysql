@@ -46,6 +46,16 @@ document.getElementById('items').addEventListener('click', async () => {
     }
 });
 
+// Xử lý User
+document.getElementById('user').addEventListener('click', async () => {
+    try {
+        await fetch('/register', { method: 'POST' });
+        window.location.href = '/register.html';
+    } catch (error) {
+        console.error('Lỗi User:', error);
+    }
+});
+
 function renderChart(categories) {
     const ctx = document.getElementById('categoryChart');
     // Kiểm tra canvas tồn tại
