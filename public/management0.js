@@ -1,6 +1,4 @@
-
 let currentUser = null;
-
 const modal = document.getElementById('userFormModal');
 const userForm = document.getElementById('userForm');
 
@@ -12,13 +10,9 @@ async function loadUsers() {
         const users = await response.json();
         renderUsers(users);
     } catch (error) {
-        const response = await fetch('/login');
         showError(error.message);
     }
 }
-
-// Khởi động
-document.addEventListener('DOMContentLoaded', loadUsers);
 
 // Hiển thị danh sách
 function renderUsers(users) {
@@ -31,7 +25,7 @@ function renderUsers(users) {
             <td>${user.username}</td>
             <td>${user.email || '-'}</td>
             <td>${user.role}</td>
-            <td class="action-buttons">
+            <td>
                 <button class="edit-btn" data-id="${user.id}">Sửa</button>
                 <button class="delete-btn" data-id="${user.id}">Xóa</button>
             </td>
@@ -39,7 +33,7 @@ function renderUsers(users) {
         tbody.appendChild(row);
     });
 
-    // Thêm sự kiện cho các nút
+    // Thêm sự kiện
     document.querySelectorAll('.edit-btn').forEach(btn => {
         btn.addEventListener('click', () => showEditForm(btn.dataset.id));
     });
@@ -52,9 +46,10 @@ function renderUsers(users) {
 // Hiển thị form chỉnh sửa
 async function showEditForm(userId) {
     try {
-        const response = await fetch(`/api/mainUsers/${userId}`);
+        const response = await fetch(`/api/users/${userId}`);
         if (!response.ok) throw new Error('Failed to fetch user');
         currentUser = await response.json();
+        
         document.getElementById('userId').value = currentUser.id;
         document.getElementById('username').value = currentUser.username;
         document.getElementById('email').value = currentUser.email || '';
@@ -77,7 +72,7 @@ userForm.addEventListener('submit', async (e) => {
     };
 
     try {
-        const url = currentUser ? `/api/mainUsers/${currentUser.id}` : '/api/users';
+        const url = currentUser ? `/api/users/${currentUser.id}` : '/api/users';
         const method = currentUser ? 'PUT' : 'POST';
         
         const response = await fetch(url, {
@@ -104,7 +99,7 @@ async function deleteUser(userId) {
     if (!confirm('Bạn chắc chắn muốn xóa user này?')) return;
     
     try {
-        const response = await fetch(`/api/mainUsers/${userId}`, { method: 'DELETE' });
+        const response = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
         if (!response.ok) throw new Error('Delete failed');
         await loadUsers();
     } catch (error) {
@@ -132,55 +127,5 @@ document.querySelector('.close').addEventListener('click', () => {
     modal.style.display = 'none';
 });
 
-/*
-app.get('/api/mainUsers/:id', requireAdmin, (req, res) => {
-    const userId = parseInt(req.params.id);
-
-    // 1. Validate ID đầu vào
-    if (isNaN(userId)) {
-        return res.status(400).json({ 
-            error: 'ID phải là số nguyên hợp lệ' 
-        });
-    }
-
-    // 2. Tạo câu query SQL (chỉ lấy các trường cần thiết)
-    const query = `
-        SELECT 
-            id, 
-            username, 
-            email, 
-            role, 
-            created_at AS createdAt 
-        FROM users 
-        WHERE id = ?
-    `;
-
-    // 3. Thực thi query bằng promise
-    connection.promise()
-        .query(query, [userId])
-        .then(([results, fields]) => {
-            // 4. Xử lý kết quả trả về
-            if (results.length === 0) {
-                return res.status(404).json({ 
-                    error: `Không tìm thấy user với ID ${userId}` 
-                });
-            }
-
-            // 5. Format lại ngày tháng
-            const user = {
-                ...results[0],
-                createdAt: new Date(results[0].createdAt).toISOString()
-            };
-
-            res.json(user);
-        })
-        .catch(error => {
-            // 6. Xử lý lỗi database
-            console.error('Lỗi truy vấn database:', error);
-            res.status(500).json({ 
-                error: 'Lỗi hệ thống khi truy vấn dữ liệu user' 
-            });
-        });
-});
-
-*/
+// Khởi động
+document.addEventListener('DOMContentLoaded', loadUsers);

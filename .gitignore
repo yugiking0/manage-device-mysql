@@ -1,5 +1,6 @@
 # Compiled source #
 ###################
+.vscode
 *.com
 *.class
 *.dll
@@ -38,3 +39,4 @@ Thumbs.db
 # Folder
 ######################
 node_modules/*
+node_modules/

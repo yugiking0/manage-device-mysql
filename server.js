@@ -6,6 +6,9 @@ const mysql = require('mysql2');
 const config = require('./config');
 const path = require('path');
 
+
+const morgan = require('morgan');
+
 const app = express();
 const port = 3000;
 
@@ -24,12 +27,16 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+
 // Middleware
 // Sắp xếp các middleware đúng thứ tự
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.use(morgan('dev'));
+
 app.use(session({
     secret: 'your-secret-key',
     resave: false,
@@ -37,11 +44,22 @@ app.use(session({
     cookie: { secure: false } // Đặt true nếu dùng HTTPS
 }));
 
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
+  });
+
 // Middleware kiểm tra đăng nhập
-const requireLogin = (req, res, next) => {
+const requireLoginx = (req, res, next) => {
     if (!req.session.userId) {
         return res.redirect('/login.html');
     }
+    next();
+};
+
+// Middleware kiểm tra đăng nhập
+const requireLogin = (req, res, next) => {
+    if (!req.session.userId) return res.status(401).json({ error: 'Unauthorized' });
     next();
 };
 
@@ -59,6 +77,20 @@ const requireAdmin = (req, res, next) => {
         (err, results) => {
             if (err || results[0].role !== 'admin') {
                 return res.status(403).send('Forbidden');
+            }
+            next();
+        }
+    );
+};
+
+// Middleware kiểm tra admin
+const requireAdminx = (req, res, next) => {
+    connection.query(
+        'SELECT role FROM users WHERE id = ?',
+        [req.session.userId],
+        (err, results) => {
+            if (err || !results[0] || results[0].role !== 'admin') {
+                return res.status(403).json({ error: 'Forbidden' });
             }
             next();
         }
@@ -164,6 +196,47 @@ app.put('/api/users/:id', requireAdmin, async (req, res) => {
     }
 });
 
+app.get('/api/users/:id', requireAdmin, async (req, res) => {
+
+    const { username, password, email, role } = req.body;    
+    try {
+        let updateData = { username, email, role };
+        
+        // Nếu có password mới, hash password
+        if (password) {
+            updateData.password = await bcrypt.hash(password, 10);
+        }
+
+        await connection.promise().query(
+            'UPDATE users SET ? WHERE id = ?',
+            [updateData, req.params.id]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(400).json({ error: 'Cập nhật thất bại' });
+    }
+});
+
+app.get('/api/Users/:id', requireAdmin, async (req, res) => {
+    const { username, password, email, role } = req.body;    
+    try {
+        let updateData = { username, email, role };
+        
+        // Nếu có password mới, hash password
+        if (password) {
+            updateData.password = await bcrypt.hash(password, 10);
+        }
+
+        await connection.promise().query(
+            'UPDATE users SET ? WHERE id = ?',
+            [updateData, req.params.id]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(400).json({ error: 'Cập nhật thất bại' });
+    }
+});
+
 // API đăng xuất
 app.post('/logout', (req, res) => {
     req.session.destroy();
@@ -179,7 +252,6 @@ app.get('/dashboard', requireLogin, (req, res) => {
 app.get('/items', (req, res) => {
     const { page = 1, limit = 10, search = '' } = req.query;
     const offset = (page - 1) * limit;
-    
     let query = 'SELECT * FROM items';
     let countQuery = 'SELECT COUNT(*) AS total FROM items';
     const params = [];
@@ -278,7 +350,7 @@ app.get('/api/statistics', requireLogin, async (req, res) => {
 // API get all users
 app.get('/api/users', requireAdmin, (req, res) => {
     connection.query(
-        'SELECT id, username, email, role FROM users',
+        'SELECT id, username, email, role, created_at FROM users',
         (err, results) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json(results);
@@ -286,19 +358,19 @@ app.get('/api/users', requireAdmin, (req, res) => {
     );
 });
 
-// API update user
-app.put('/api/users/:id', requireAdmin, async (req, res) => {
-    alert("CHeck here");
-
-    const { username, email, role } = req.body;
+app.post('/api/users', requireAdmin, async (req, res) => {
+    const { username, password, email, role } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Invalid input' });
+    
     try {
+        const hashedPassword = await bcrypt.hash(password, 10);
         await connection.promise().query(
-            'UPDATE users SET username = ?, email = ?, role = ? WHERE id = ?',
-            [username, email, role, req.params.id]
+            'INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)',
+            [username, hashedPassword, email, role]
         );
         res.json({ success: true });
     } catch (error) {
-        res.status(400).json({ error: 'Cập nhật thất bại' });
+        res.status(400).json({ error: 'Username already exists' });
     }
 });
 
@@ -314,13 +386,107 @@ app.delete('/api/users/:id', requireAdmin, (req, res) => {
     );
 });
 
-// Xử lý 404 cho API
-app.use('/api/*', (req, res) => {
-    res.status(404).json({ error: 'API endpoint không tồn tại' });
+/*
+app.get('/api/mainUsers/:id', requireAdmin, (req, res) => {
+    const { id } = req.params;
+    const { username, password, email, role } = req.body;
+
+    connection.query(
+        'SELECT id, username, email, role, created_at FROM users WHERE id = ?',
+        (err, results) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(results);
+        }
+    );
 });
+*/
+
+app.put('/api/mainUsers/:id', requireAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { username, password, email, role } = req.body;
+    
+    try {
+        const updateData = { username, email, role };
+        if (password) {
+            updateData.password = await bcrypt.hash(password, 10);
+        }
+        
+        await connection.promise().query(
+            'UPDATE users SET ? WHERE id = ?',
+            [updateData, id]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(400).json({ error: 'Update failed' });
+    }
+});
+
+app.delete('/api/mainUsers/id', requireAdmin, (req, res) => {
+    connection.query(
+        'DELETE FROM users WHERE id = ?',
+        [req.params.id],
+        (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true });
+        }
+    );
+});
+
+app.get('/api/mainUsers/:id', requireAdmin, (req, res) => {
+    const userId = parseInt(req.params.id);
+
+    // 1. Validate ID đầu vào
+    if (isNaN(userId)) {
+        return res.status(400).json({ 
+            error: 'ID phải là số nguyên hợp lệ' 
+        });
+    }
+
+    // 2. Tạo câu query SQL (chỉ lấy các trường cần thiết)
+    const query = `
+        SELECT 
+            id, 
+            username, 
+            email, 
+            role, 
+            created_at AS createdAt 
+        FROM users 
+        WHERE id = ?
+    `;
+    // 3. Thực thi query bằng promise
+    connection.promise()
+        .query(query, [userId])
+        .then(([results, fields]) => {
+            // 4. Xử lý kết quả trả về
+            if (results.length === 0) {
+                return res.status(404).json({ 
+                    error: `Không tìm thấy user với ID ${userId}` 
+                });
+            }
+            // 5. Format lại ngày tháng
+            const user = {
+                ...results[0],
+                createdAt: new Date(results[0].createdAt).toISOString()
+            };
+            res.json(user);
+        })
+        .catch(error => {
+            // 6. Xử lý lỗi database
+            console.error('Lỗi truy vấn database:', error);
+            res.status(500).json({ 
+                error: 'Lỗi hệ thống khi truy vấn dữ liệu user' 
+            });
+        });
+});
+
 
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
+});
+
+// Xử lý 404 cho API
+app.use('/api/*', (req, res) => {
+    res.status(404).json({ error: 'API endpoint không tồn tại' });
 });
 
 // Static files nên ở cuối
