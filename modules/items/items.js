@@ -92,8 +92,8 @@ async function handleDelete(e) {
 // Phân trang
 function updatePagination(data) {
     document.getElementById('currentPage').textContent = currentPage + "/" + data.totalPages;
-    //document.getElementById('prevPage').textContent = "<" ;
-    //document.getElementById('nextPage').textContent = ">" ;
+    document.getElementById('prevPage').textContent = "<" ;
+    document.getElementById('nextPage').textContent = ">" ;
     document.getElementById('prevPage').disabled = currentPage === 1;
     document.getElementById('nextPage').disabled = currentPage === data.totalPages;
 }

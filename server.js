@@ -1,16 +1,14 @@
 const session = require('express-session');
-
-const express = require('express');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2');
-const config = require('./config');
 const path = require('path');
-
-
 const morgan = require('morgan');
 
+const express = require('express');
 const app = express();
 const port = 3000;
+
+const config = require('./data/config');
 
 // Kết nối MySQL
 const connection = mysql.createConnection(config);
@@ -34,8 +32,8 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
-
 app.use(morgan('dev'));
+app.use(express.static('public'));
 
 app.use(session({
     secret: 'your-secret-key',
@@ -47,30 +45,21 @@ app.use(session({
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
     next();
-  });
+});
 
 // Middleware kiểm tra đăng nhập
-const requireLoginx = (req, res, next) => {
-    if (!req.session.userId) {
-        return res.redirect('/login.html');
-    }
-    next();
-};
-
-// Middleware kiểm tra đăng nhập
-const requireLogin = (req, res, next) => {
+const zrequireLogin = (req, res, next) => {
     if (!req.session.userId) return res.status(401).json({ error: 'Unauthorized' });
     next();
 };
 
-app.use('/api', requireLogin); // Áp dụng cho tất cả API
+app.use('/api', zrequireLogin); // Áp dụng cho tất cả API
 
 // Middleware kiểm tra admin
 const requireAdmin = (req, res, next) => {
     if (!req.session.userId) {
-        return res.redirect('/login.html');
+        res.sendFile(path.join(__dirname, 'modules', 'login', 'login.html'));
     }
-    
     connection.query(
         'SELECT role FROM users WHERE id = ?',
         [req.session.userId],
@@ -83,40 +72,6 @@ const requireAdmin = (req, res, next) => {
     );
 };
 
-// Middleware kiểm tra admin
-const requireAdminx = (req, res, next) => {
-    connection.query(
-        'SELECT role FROM users WHERE id = ?',
-        [req.session.userId],
-        (err, results) => {
-            if (err || !results[0] || results[0].role !== 'admin') {
-                return res.status(403).json({ error: 'Forbidden' });
-            }
-            next();
-        }
-    );
-};
-
-// Route đăng ký user (chỉ admin truy cập)
-app.get('/register.html', requireAdmin, (req, res) => {
-    res.sendFile(path.join(__dirname, 'public/register.html'));
-});
-
-app.post('/api/register', requireAdmin, async (req, res) => {
-    const { username, password, email, role } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    try {
-        await connection.promise().query(
-            'INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)',
-            [username, hashedPassword, email, role]
-        );
-        res.json({ success: true });
-    } catch (error) {
-        res.status(400).json({ error: 'Username đã tồn tại' });
-    }
-});
-
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -128,7 +83,7 @@ app.post('/login', async (req, res) => {
     try {
         // Tìm user trong database
         const [rows] = await connection.promise().query(
-            'SELECT * FROM users WHERE username = ?', 
+            'SELECT * FROM users WHERE username = ?',
             [username]
         );
 
@@ -137,7 +92,7 @@ app.post('/login', async (req, res) => {
         }
 
         const user = rows[0];
-        
+
         // So sánh mật khẩu
         const match = await bcrypt.compare(password, user.password);
         if (!match) {
@@ -156,96 +111,32 @@ app.post('/login', async (req, res) => {
 
 const bcrypt = require('bcrypt'); // Đảm bảo đã require bcrypt
 
-// API tạo user mới (POST)
-app.post('/api/users', requireAdmin, async (req, res) => {
-    const { username, password, email, role } = req.body;
-    
-    try {
-        // Hash password trước khi lưu vào database
-        const hashedPassword = await bcrypt.hash(password, 10);
-        
-        await connection.promise().query(
-            'INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)',
-            [username, hashedPassword, email, role]
-        );
-        res.json({ success: true });
-    } catch (error) {
-        res.status(400).json({ error: 'Username đã tồn tại' });
-    }
-});
-
-// API cập nhật user (PUT)
-app.put('/api/users/:id', requireAdmin, async (req, res) => {
-    const { username, password, email, role } = req.body;
-    
-    try {
-        let updateData = { username, email, role };
-        
-        // Nếu có password mới, hash password
-        if (password) {
-            updateData.password = await bcrypt.hash(password, 10);
-        }
-
-        await connection.promise().query(
-            'UPDATE users SET ? WHERE id = ?',
-            [updateData, req.params.id]
-        );
-        res.json({ success: true });
-    } catch (error) {
-        res.status(400).json({ error: 'Cập nhật thất bại' });
-    }
-});
-
-app.get('/api/users/:id', requireAdmin, async (req, res) => {
-
-    const { username, password, email, role } = req.body;    
-    try {
-        let updateData = { username, email, role };
-        
-        // Nếu có password mới, hash password
-        if (password) {
-            updateData.password = await bcrypt.hash(password, 10);
-        }
-
-        await connection.promise().query(
-            'UPDATE users SET ? WHERE id = ?',
-            [updateData, req.params.id]
-        );
-        res.json({ success: true });
-    } catch (error) {
-        res.status(400).json({ error: 'Cập nhật thất bại' });
-    }
-});
-
-app.get('/api/Users/:id', requireAdmin, async (req, res) => {
-    const { username, password, email, role } = req.body;    
-    try {
-        let updateData = { username, email, role };
-        
-        // Nếu có password mới, hash password
-        if (password) {
-            updateData.password = await bcrypt.hash(password, 10);
-        }
-
-        await connection.promise().query(
-            'UPDATE users SET ? WHERE id = ?',
-            [updateData, req.params.id]
-        );
-        res.json({ success: true });
-    } catch (error) {
-        res.status(400).json({ error: 'Cập nhật thất bại' });
-    }
-});
-
 // API đăng xuất
 app.post('/logout', (req, res) => {
     req.session.destroy();
     res.json({ success: true });
 });
 
-// Route bảo vệ
+
+app.get('/login', (req, res) => {
+    res.sendFile(path.join(__dirname, 'modules', 'login', 'login.html'));
+});
+
+
+// Middleware kiểm tra đăng nhập
+const requireLogin = (req, res, next) => {
+    if (!req.session.userId) 
+        return res.sendFile(__dirname + '/modules/login/login.html');
+    next();
+};
+
+// Route chính
+app.get('/', requireLogin, (req, res) => {
+    res.sendFile(__dirname + '/modules/login/login.html');
+});
+
 app.get('/dashboard', requireLogin, (req, res) => {
-    res.sendFile(path.join(__dirname, 'public/dashboard.html'));
+    res.sendFile(__dirname + '/modules/dashboard/dashboard.html');
 });
 
 // API endpoints
@@ -267,10 +158,10 @@ app.get('/items', (req, res) => {
 
     connection.query(countQuery, params.slice(0, 2), (err, countResult) => {
         if (err) return res.status(500).json({ error: err.message });
-        
+
         connection.query(query, params, (err, results) => {
             if (err) return res.status(500).json({ error: err.message });
-            
+
             res.json({
                 items: results,
                 total: countResult[0].total,
@@ -286,7 +177,7 @@ app.post('/items', (req, res) => {
     if (!name || quantity < 0) {
         return res.status(400).json({ error: 'Invalid input' });
     }
-    
+
     const query = 'INSERT INTO items SET ?';
     connection.query(query, { name, quantity, description }, (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -321,7 +212,7 @@ app.get('/api/statistics', requireLogin, async (req, res) => {
         const [totalItems] = await connection.promise().query(
             'SELECT COUNT(*) AS total FROM items'
         );
-        
+
         const [totalQuantity] = await connection.promise().query(
             'SELECT SUM(quantity) AS total FROM items'
         );
@@ -340,7 +231,7 @@ app.get('/api/statistics', requireLogin, async (req, res) => {
             lowStock,
             categories
         });
-        
+
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Lỗi server' });
@@ -361,7 +252,7 @@ app.get('/api/users', requireAdmin, (req, res) => {
 app.post('/api/users', requireAdmin, async (req, res) => {
     const { username, password, email, role } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Invalid input' });
-    
+
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
         await connection.promise().query(
@@ -386,31 +277,16 @@ app.delete('/api/users/:id', requireAdmin, (req, res) => {
     );
 });
 
-/*
-app.get('/api/mainUsers/:id', requireAdmin, (req, res) => {
-    const { id } = req.params;
-    const { username, password, email, role } = req.body;
-
-    connection.query(
-        'SELECT id, username, email, role, created_at FROM users WHERE id = ?',
-        (err, results) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json(results);
-        }
-    );
-});
-*/
-
 app.put('/api/mainUsers/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;
     const { username, password, email, role } = req.body;
-    
+
     try {
         const updateData = { username, email, role };
         if (password) {
             updateData.password = await bcrypt.hash(password, 10);
         }
-        
+
         await connection.promise().query(
             'UPDATE users SET ? WHERE id = ?',
             [updateData, id]
@@ -437,8 +313,8 @@ app.get('/api/mainUsers/:id', requireAdmin, (req, res) => {
 
     // 1. Validate ID đầu vào
     if (isNaN(userId)) {
-        return res.status(400).json({ 
-            error: 'ID phải là số nguyên hợp lệ' 
+        return res.status(400).json({
+            error: 'ID phải là số nguyên hợp lệ'
         });
     }
 
@@ -459,8 +335,8 @@ app.get('/api/mainUsers/:id', requireAdmin, (req, res) => {
         .then(([results, fields]) => {
             // 4. Xử lý kết quả trả về
             if (results.length === 0) {
-                return res.status(404).json({ 
-                    error: `Không tìm thấy user với ID ${userId}` 
+                return res.status(404).json({
+                    error: `Không tìm thấy user với ID ${userId}`
                 });
             }
             // 5. Format lại ngày tháng
@@ -473,8 +349,8 @@ app.get('/api/mainUsers/:id', requireAdmin, (req, res) => {
         .catch(error => {
             // 6. Xử lý lỗi database
             console.error('Lỗi truy vấn database:', error);
-            res.status(500).json({ 
-                error: 'Lỗi hệ thống khi truy vấn dữ liệu user' 
+            res.status(500).json({
+                error: 'Lỗi hệ thống khi truy vấn dữ liệu user'
             });
         });
 });

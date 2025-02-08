@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         const response = await fetch('/api/statistics');
         const data = await response.json();
-        
+
         // Hiển thị tổng quan
         document.getElementById('totalItems').textContent = data.totalItems;
         document.getElementById('totalQuantity').textContent = data.totalQuantity;
@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Vẽ biểu đồ
         renderChart(data.categories);
-        
+
     } catch (error) {
         console.error('Lỗi tải dữ liệu:', error);
     }
@@ -49,8 +49,8 @@ document.getElementById('items').addEventListener('click', async () => {
 // Xử lý User
 document.getElementById('user').addEventListener('click', async () => {
     try {
-        await fetch('/register', { method: 'POST' });
-        window.location.href = '/register.html';
+        await fetch('/user-management', { method: 'POST' });
+        window.location.href = '/user-management.html';
     } catch (error) {
         console.error('Lỗi User:', error);
     }
