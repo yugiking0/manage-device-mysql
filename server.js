@@ -376,6 +376,7 @@ app.post('/api/users', requireAdmin, async (req, res) => {
 
 // API delete user
 app.delete('/api/users/:id', requireAdmin, (req, res) => {
+    console.log("1111111111111111111111111111");
     connection.query(
         'DELETE FROM users WHERE id = ?',
         [req.params.id],
@@ -385,21 +386,6 @@ app.delete('/api/users/:id', requireAdmin, (req, res) => {
         }
     );
 });
-
-/*
-app.get('/api/mainUsers/:id', requireAdmin, (req, res) => {
-    const { id } = req.params;
-    const { username, password, email, role } = req.body;
-
-    connection.query(
-        'SELECT id, username, email, role, created_at FROM users WHERE id = ?',
-        (err, results) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json(results);
-        }
-    );
-});
-*/
 
 app.put('/api/mainUsers/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;
@@ -421,7 +407,8 @@ app.put('/api/mainUsers/:id', requireAdmin, async (req, res) => {
     }
 });
 
-app.delete('/api/mainUsers/id', requireAdmin, (req, res) => {
+app.delete('/api/mainUsers/:id', requireAdmin, (req, res) => {
+    console.log("Delete");
     connection.query(
         'DELETE FROM users WHERE id = ?',
         [req.params.id],
@@ -478,7 +465,6 @@ app.get('/api/mainUsers/:id', requireAdmin, (req, res) => {
             });
         });
 });
-
 
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
